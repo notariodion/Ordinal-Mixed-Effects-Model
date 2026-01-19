@@ -1,4 +1,4 @@
-# Clinical Trial Visualization with Ordinal Mixed-Effects Model 
+# Simulasi Uji Klinik dengan Ordinal Mixed-Effects Model 
 
 Repository ini berisi **skrip R lengkap** untuk:
 1. **Simulasi data uji klinik**
