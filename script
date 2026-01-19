@@ -50,6 +50,9 @@ data_sim$phq_9 <- mapply(sample_phq, data_sim$treatment, data_sim$period)
 data_sim$dash <- factor(data_sim$dash, levels = dash_levels, ordered = TRUE)
 data_sim$phq_9 <- factor(data_sim$phq_9, levels = phq_levels, ordered = TRUE)
 
+# cek struktur data
+View(data_sim)
+
 # ============================================================================
 # 2. ANALISIS MODEL 
 # ============================================================================
