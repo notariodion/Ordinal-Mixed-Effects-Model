@@ -13,7 +13,7 @@ terutama ketika **outcome bersifat ordinal** dan **subjek diukur lebih dari satu
 
 ---
 
-## 📌 Latar Belakang
+## Latar Belakang
 
 Dalam banyak penelitian klinis dan sosial, variabel hasil sering kali diukur dalam **skala ordinal**, misalnya:
 - tingkat keparahan penyakit (normal, ringan, sedang, berat)
@@ -29,7 +29,7 @@ Penggunaan metode parametrik seperti **t-test** atau **linear mixed models** pad
 
 ---
 
-## 🎯 Tujuan Repository
+##  Tujuan Repository
 
 Repository ini dibuat untuk:
 - memberikan **pengantar konseptual** Ordinal Mixed-Effects Model
@@ -39,7 +39,7 @@ Repository ini dibuat untuk:
 
 ---
 
-## 🧠 Model Statistik
+## Model Statistik
 
 Model utama yang digunakan:
 
@@ -57,7 +57,7 @@ Model diestimasi menggunakan **cumulative logit link**.
 
 ---
 
-## 🛠️ Tools & Packages
+## Tools & Packages
 
 Analisis dilakukan menggunakan paket R berikut:
 
