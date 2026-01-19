@@ -1,0 +1,174 @@
+# ============================================================================
+# VISUALISASI DATA CLINICAL TRIAL - DASH DAN PHQ-9
+# ============================================================================
+# load libraries yang dibutuhkan
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(scales)
+library(ordinal)
+
+# ============================================================================
+# 1. GENERATE DATA 
+# ============================================================================
+
+set.seed(123)
+n_subj <- 126
+id <- 1:n_subj
+treatment <- rep(c("placebo", "test"), each = n_subj/2)
+
+data_sim <- expand.grid(
+  id = id,
+  period = c("pre-test", "post-test")
+)
+
+data_sim$treatment <- rep(treatment, each = 2)
+
+dash_levels <- c("normal", "ringan", "sedang", "berat", "sangat berat")
+phq_levels  <- c("ringan", "sedang", "sedang berat", "berat")
+
+sample_dash <- function(trt, period) {
+  if (trt == "test" && period == "post-test") {
+    sample(dash_levels, 1, prob = c(0.35, 0.30, 0.20, 0.10, 0.05))
+  } else {
+    sample(dash_levels, 1, prob = c(0.10, 0.25, 0.30, 0.20, 0.15))
+  }
+}
+
+sample_phq <- function(trt, period) {
+  if (trt == "test" && period == "post-test") {
+    sample(phq_levels, 1, prob = c(0.40, 0.30, 0.20, 0.10))
+  } else {
+    sample(phq_levels, 1, prob = c(0.20, 0.30, 0.30, 0.20))
+  }
+}
+
+data_sim$dash <- mapply(sample_dash, data_sim$treatment, data_sim$period)
+data_sim$phq_9 <- mapply(sample_phq, data_sim$treatment, data_sim$period)
+
+data_sim$dash <- factor(data_sim$dash, levels = dash_levels, ordered = TRUE)
+data_sim$phq_9 <- factor(data_sim$phq_9, levels = phq_levels, ordered = TRUE)
+
+# ============================================================================
+# 2. ANALISIS MODEL 
+# ============================================================================
+
+model_dash <- clmm(
+  dash ~ treatment * period + (1 | id),
+  data = data_sim,
+  link = "logit"
+)
+
+summary(model_dash)
+
+model_phq_9 <- clmm(
+  phq_9 ~ treatment * period + (1 | id),
+  data = data_sim,
+  link = "logit"
+)
+
+summary(model_phq_9)
+
+# ============================================================================
+# 3. VISUALISASI - DASH SCORE
+# ============================================================================
+
+# 3.1 Grouped Bar Chart - DASH
+dash_summary <- data_sim %>%
+  group_by(treatment, period, dash) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(treatment, period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+p1 <- ggplot(dash_summary, aes(x = dash, y = percentage, fill = period)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  facet_wrap(~ treatment, labeller = labeller(treatment = c(
+    "placebo" = "Placebo Group",
+    "test" = "Test Group"
+  ))) +
+  scale_fill_manual(
+    values = c("#3498db", "#9b59b6"),
+    name = "Period",
+    labels = c("Pre-test", "Post-test")
+  ) +
+  labs(
+    title = "Perbandingan DASH Score: Pre-test vs Post-test",
+    subtitle = "Grouped Bar Chart untuk melihat perubahan distribusi",
+    x = "DASH Level",
+    y = "Persentase (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(aes(label = sprintf("%.0f%%", percentage)),
+            position = position_dodge(width = 0.7),
+            vjust = -0.5, size = 3)
+
+# ============================================================================
+# 4. VISUALISASI - PHQ-9 SCORE
+# ============================================================================
+
+# 4.1 Grouped Bar Chart - PHQ-9
+phq_summary <- data_sim %>%
+  group_by(treatment, period, phq_9) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(treatment, period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+
+p2 <- ggplot(phq_summary, aes(x = phq_9, y = percentage, fill = period)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  facet_wrap(~ treatment, labeller = labeller(treatment = c(
+    "placebo" = "Placebo Group",
+    "test" = "Test Group"
+  ))) +
+  scale_fill_manual(
+    values = c("#3498db", "#9b59b6"),
+    name = "Period",
+    labels = c("Pre-test", "Post-test")
+  ) +
+  labs(
+    title = "Perbandingan PHQ-9 Score: Pre-test vs Post-test",
+    subtitle = "Grouped Bar Chart untuk melihat perubahan distribusi",
+    x = "PHQ-9 Level",
+    y = "Persentase (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(aes(label = sprintf("%.0f%%", percentage)),
+            position = position_dodge(width = 0.7),
+            vjust = -0.5, size = 3)
+
+
+# ============================================================================
+# 5. DISPLAY SEMUA PLOT
+# ============================================================================
+
+# Tampilkan plot satu per satu
+print(p1)
+print(p2)
+
+
+# ============================================================================
+# 8. SAVE PLOTS 
+# ============================================================================
+
+# Simpan plot individual
+ggsave("plot1.png", p1, width = 10, height = 6, dpi = 300)
+ggsave("plot2.png", p2, width = 10, height = 6, dpi = 300)
+
+
