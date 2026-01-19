@@ -16,31 +16,50 @@ library(ordinal)
 set.seed(123)
 n_subj <- 126
 id <- 1:n_subj
+
+# Perbaikan: buat assignment treatment per subjek
 treatment <- rep(c("placebo", "test"), each = n_subj/2)
 
-data_sim <- expand.grid(
-  id = id,
-  period = c("pre-test", "post-test")
+# Buat data long format dengan benar
+data_sim <- data.frame(
+  id = rep(id, each = 2),
+  period = rep(c("pre-test", "post-test"), times = n_subj)
 )
 
-data_sim$treatment <- rep(treatment, each = 2)
+# Assign treatment berdasarkan id subjek
+data_sim$treatment <- ifelse(data_sim$id <= n_subj/2, "placebo", "test")
 
 dash_levels <- c("normal", "ringan", "sedang", "berat", "sangat berat")
 phq_levels  <- c("ringan", "sedang", "sedang berat", "berat")
 
+# Fungsi sampling yang diperbaiki
 sample_dash <- function(trt, period) {
-  if (trt == "test" && period == "post-test") {
-    sample(dash_levels, 1, prob = c(0.35, 0.30, 0.20, 0.10, 0.05))
-  } else {
+  # Pre-test: kedua kelompok memiliki distribusi yang sama
+  if (period == "pre-test") {
     sample(dash_levels, 1, prob = c(0.10, 0.25, 0.30, 0.20, 0.15))
+  } 
+  # Post-test: kelompok test menunjukkan perbaikan
+  else if (trt == "test" && period == "post-test") {
+    sample(dash_levels, 1, prob = c(0.35, 0.30, 0.20, 0.10, 0.05))
+  } 
+  # Post-test: kelompok plasebo relatif stabil
+  else {
+    sample(dash_levels, 1, prob = c(0.12, 0.25, 0.28, 0.20, 0.15))
   }
 }
 
 sample_phq <- function(trt, period) {
-  if (trt == "test" && period == "post-test") {
-    sample(phq_levels, 1, prob = c(0.40, 0.30, 0.20, 0.10))
-  } else {
+  # Pre-test: kedua kelompok memiliki distribusi yang sama
+  if (period == "pre-test") {
     sample(phq_levels, 1, prob = c(0.20, 0.30, 0.30, 0.20))
+  } 
+  # Post-test: kelompok test menunjukkan perbaikan
+  else if (trt == "test" && period == "post-test") {
+    sample(phq_levels, 1, prob = c(0.40, 0.30, 0.20, 0.10))
+  } 
+  # Post-test: kelompok plasebo relatif stabil
+  else {
+    sample(phq_levels, 1, prob = c(0.22, 0.30, 0.28, 0.20))
   }
 }
 
@@ -50,9 +69,21 @@ data_sim$phq_9 <- mapply(sample_phq, data_sim$treatment, data_sim$period)
 data_sim$dash <- factor(data_sim$dash, levels = dash_levels, ordered = TRUE)
 data_sim$phq_9 <- factor(data_sim$phq_9, levels = phq_levels, ordered = TRUE)
 
-# cek struktur data
-View(data_sim)
+# Cek struktur data
+print(head(data_sim, 20))
 
+# Verifikasi distribusi treatment
+print("\n=== Verifikasi Treatment Assignment ===")
+print(table(data_sim$period, data_sim$treatment))
+
+# Verifikasi sebaran
+print("\n=== Sebaran DASH ===")
+print(ftable(treatment ~ period ~ dash, data = data_sim))
+
+print("\n=== Sebaran PHQ-9 ===")
+print(ftable(treatment ~ period ~ phq_9, data = data_sim))
+
+ 
 # ============================================================================
 # 2. ANALISIS MODEL 
 # ============================================================================
@@ -77,14 +108,44 @@ summary(model_phq_9)
 # 3. VISUALISASI - DASH SCORE
 # ============================================================================
 
-# 3.1 Grouped Bar Chart - DASH
+# 3.1 Stacked Bar Chart - DASH
 dash_summary <- data_sim %>%
   group_by(treatment, period, dash) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(treatment, period) %>%
   mutate(percentage = count / sum(count) * 100)
 
-p1 <- ggplot(dash_summary, aes(x = dash, y = percentage, fill = period)) +
+p1 <- ggplot(dash_summary, aes(x = period, y = percentage, fill = dash)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  facet_wrap(~ treatment, labeller = labeller(treatment = c(
+    "placebo" = "Placebo Group",
+    "test" = "Test Group"
+  ))) +
+  scale_fill_manual(
+    values = c("#2ecc71", "#f39c12", "#e67e22", "#e74c3c", "#c0392b"),
+    name = "DASH Level"
+  ) +
+  labs(
+    title = "Distribusi DASH Score berdasarkan Treatment dan Period",
+    subtitle = "Stacked Bar Chart menunjukkan persentase setiap level severity",
+    x = "Period",
+    y = "Persentase (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(aes(label = ifelse(percentage > 5, 
+                               sprintf("%.0f%%", percentage), "")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 3, fontface = "bold")
+
+# 3.2 Grouped Bar Chart - DASH
+p2 <- ggplot(dash_summary, aes(x = dash, y = percentage, fill = period)) +
   geom_bar(stat = "identity", position = "dodge", width = 0.7) +
   facet_wrap(~ treatment, labeller = labeller(treatment = c(
     "placebo" = "Placebo Group",
@@ -118,15 +179,44 @@ p1 <- ggplot(dash_summary, aes(x = dash, y = percentage, fill = period)) +
 # 4. VISUALISASI - PHQ-9 SCORE
 # ============================================================================
 
-# 4.1 Grouped Bar Chart - PHQ-9
+# 4.1 Stacked Bar Chart - PHQ-9
 phq_summary <- data_sim %>%
   group_by(treatment, period, phq_9) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(treatment, period) %>%
   mutate(percentage = count / sum(count) * 100)
 
+p3 <- ggplot(phq_summary, aes(x = period, y = percentage, fill = phq_9)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  facet_wrap(~ treatment, labeller = labeller(treatment = c(
+    "placebo" = "Placebo Group",
+    "test" = "Test Group"
+  ))) +
+  scale_fill_manual(
+    values = c("#27ae60", "#f39c12", "#e67e22", "#e74c3c"),
+    name = "PHQ-9 Level"
+  ) +
+  labs(
+    title = "Distribusi PHQ-9 Score berdasarkan Treatment dan Period",
+    subtitle = "Stacked Bar Chart menunjukkan persentase setiap level severity",
+    x = "Period",
+    y = "Persentase (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11),
+    panel.grid.minor = element_blank()
+  ) +
+  geom_text(aes(label = ifelse(percentage > 5, 
+                               sprintf("%.0f%%", percentage), "")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 3, fontface = "bold")
 
-p2 <- ggplot(phq_summary, aes(x = phq_9, y = percentage, fill = period)) +
+# 4.2 Grouped Bar Chart - PHQ-9
+p4 <- ggplot(phq_summary, aes(x = phq_9, y = percentage, fill = period)) +
   geom_bar(stat = "identity", position = "dodge", width = 0.7) +
   facet_wrap(~ treatment, labeller = labeller(treatment = c(
     "placebo" = "Placebo Group",
@@ -156,22 +246,139 @@ p2 <- ggplot(phq_summary, aes(x = phq_9, y = percentage, fill = period)) +
             position = position_dodge(width = 0.7),
             vjust = -0.5, size = 3)
 
+# ============================================================================
+# 5. VISUALISASI PERUBAHAN (IMPROVEMENT)
+# ============================================================================
+
+# 5.1 Hitung perubahan untuk setiap subjek
+data_wide <- data_sim %>%
+  select(id, treatment, period, dash, phq_9) %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(dash, phq_9)
+  )
+
+# Convert ordinal ke numeric untuk kalkulasi
+dash_numeric <- setNames(1:5, dash_levels)
+phq_numeric <- setNames(1:4, phq_levels)
+
+data_wide <- data_wide %>%
+  mutate(
+    dash_pre_num = dash_numeric[as.character(`dash_pre-test`)],
+    dash_post_num = dash_numeric[as.character(`dash_post-test`)],
+    phq_pre_num = phq_numeric[as.character(`phq_9_pre-test`)],
+    phq_post_num = phq_numeric[as.character(`phq_9_post-test`)],
+    dash_change = dash_post_num - dash_pre_num,
+    phq_change = phq_post_num - phq_pre_num,
+    dash_improved = dash_change < 0,
+    phq_improved = phq_change < 0
+  )
+
+# 5.2 Summary improvement
+improvement_summary <- data_wide %>%
+  group_by(treatment) %>%
+  summarise(
+    DASH_Improved = sum(dash_improved) / n() * 100,
+    DASH_Unchanged = sum(dash_change == 0) / n() * 100,
+    DASH_Worsened = sum(dash_change > 0) / n() * 100,
+    PHQ_Improved = sum(phq_improved) / n() * 100,
+    PHQ_Unchanged = sum(phq_change == 0) / n() * 100,
+    PHQ_Worsened = sum(phq_change > 0) / n() * 100
+  )
+
+# Reshape untuk plotting
+improvement_long <- improvement_summary %>%
+  pivot_longer(
+    cols = -treatment,
+    names_to = c("Metric", "Change"),
+    names_pattern = "(.+)_(.+)",
+    values_to = "percentage"
+  )
+
+p5 <- ggplot(improvement_long, aes(x = treatment, y = percentage, fill = Change)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.6) +
+  facet_wrap(~ Metric, labeller = labeller(Metric = c(
+    "DASH" = "DASH Score",
+    "PHQ" = "PHQ-9 Score"
+  ))) +
+  scale_fill_manual(
+    values = c("Improved" = "#27ae60", "Unchanged" = "#95a5a6", "Worsened" = "#e74c3c"),
+    name = "Perubahan Status"
+  ) +
+  labs(
+    title = "Persentase Perubahan Status: Pre-test ke Post-test",
+    subtitle = "Proporsi subjek yang mengalami perbaikan, tidak berubah, atau memburuk",
+    x = "Treatment Group",
+    y = "Persentase (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 11)
+  ) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 3.5, fontface = "bold") +
+  scale_x_discrete(labels = c("placebo" = "Placebo", "test" = "Test"))
 
 # ============================================================================
-# 5. DISPLAY SEMUA PLOT
+# 6. HEATMAP - DASH
+# ============================================================================
+
+p6 <- ggplot(dash_summary, aes(x = period, y = dash, fill = percentage)) +
+  geom_tile(color = "white", size = 1) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            color = "white", fontface = "bold", size = 4) +
+  facet_wrap(~ treatment, labeller = labeller(treatment = c(
+    "placebo" = "Placebo Group",
+    "test" = "Test Group"
+  ))) +
+  scale_fill_gradient2(
+    low = "#2ecc71", mid = "#f39c12", high = "#e74c3c",
+    midpoint = 25, name = "Persentase (%)"
+  ) +
+  labs(
+    title = "Heatmap: Distribusi DASH Score",
+    subtitle = "Intensitas warna menunjukkan persentase subjek pada setiap level",
+    x = "Period",
+    y = "DASH Level"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 10, color = "gray40"),
+    legend.position = "right",
+    strip.text = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(angle = 0)
+  )
+
+# ============================================================================
+# 7. DISPLAY SEMUA PLOT
 # ============================================================================
 
 # Tampilkan plot satu per satu
 print(p1)
 print(p2)
+print(p3)
+print(p4)
+print(p5)
+print(p6)
 
+# Atau gabungkan beberapa plot
+grid.arrange(p1, p3, ncol = 1)
+grid.arrange(p2, p4, ncol = 1)
 
 # ============================================================================
-# 8. SAVE PLOTS 
+# 8. SAVE PLOTS (opsional)
 # ============================================================================
 
 # Simpan plot individual
-ggsave("plot1.png", p1, width = 10, height = 6, dpi = 300)
-ggsave("plot2.png", p2, width = 10, height = 6, dpi = 300)
-
+ggsave("dash_stacked.png", p1, width = 10, height = 6, dpi = 300)
+ggsave("dash_grouped.png", p2, width = 10, height = 6, dpi = 300)
+ggsave("phq9_stacked.png", p3, width = 10, height = 6, dpi = 300)
+ggsave("phq9_grouped.png", p4, width = 10, height = 6, dpi = 300)
+ggsave("improvement_summary.png", p5, width = 10, height = 6, dpi = 300)
+ggsave("dash_heatmap.png", p6, width = 10, height = 6, dpi = 300)
 
